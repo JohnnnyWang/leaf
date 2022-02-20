@@ -66,7 +66,7 @@ pub extern "C" fn leaf_run_with_options(
             rt_id,
             config_path.to_string(),
             #[cfg(feature = "auto-reload")]
-            auto_reload,
+                auto_reload,
             multi_thread,
             auto_threads,
             threads as usize,
@@ -89,12 +89,22 @@ pub extern "C" fn leaf_run_with_options(
 ///                    or .json, according to the enabled features.
 /// @return ERR_OK on finish running, any other errors means a startup failure.
 #[no_mangle]
-pub extern "C" fn leaf_run(rt_id: u16, config_path: *const c_char) -> i32 {
+pub extern "C" fn leaf_run(rt_id: u16, config_path: *const c_char,
+                           #[cfg(target_os = "android")] protect_path: *const c_char) -> i32 {
     if let Ok(config_path) = unsafe { CStr::from_ptr(config_path).to_str() } {
+        #[cfg(target_os = "android")]
+        let mut pp = "";
+        #[cfg(target_os = "android")] {
+            pp = unsafe { CStr::from_ptr(protect_path).to_str().unwrap() };
+        }
+
+
         let opts = leaf::StartOptions {
             config: leaf::Config::File(config_path.to_string()),
             #[cfg(feature = "auto-reload")]
             auto_reload: false,
+            #[cfg(target_os = "android")]
+            socket_protect_path:Some(pp.to_string()),
             runtime_opt: leaf::RuntimeOption::SingleThread,
         };
         if let Err(e) = leaf::start(rt_id, opts) {

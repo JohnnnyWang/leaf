@@ -7,7 +7,10 @@ ios-dev:
 	cbindgen --config leaf-ffi/cbindgen.toml leaf-ffi/src/lib.rs > target/universal/debug/leaf.h
 
 lib:
-	cargo build -p leaf-ffi --release
+	cargo build --target aarch64-linux-android -p leaf-ffi --release
+	cargo build --target x86_64-linux-android -p leaf-ffi --release
+	cargo build --target armv7-linux-androideabi -p leaf-ffi --release
+	cargo build --target i686-linux-android -p leaf-ffi --release
 	cbindgen --config leaf-ffi/cbindgen.toml leaf-ffi/src/lib.rs > target/release/leaf.h
 
 lib-dev:

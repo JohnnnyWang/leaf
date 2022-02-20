@@ -148,10 +148,10 @@ pub async fn set_outbound_binds(binds: Vec<OutboundBind>) {
 }
 
 #[cfg(target_os = "android")]
-async fn protect_socket<S: AsRawFd>(socket: S) -> io::Result<()> {
+async fn protect_socket(fd: i32) -> io::Result<()> {
     if let Some(path) = SOCKET_PROTECT_PATH.lock().await.as_ref() {
         let mut stream = UnixStream::connect(path).await?;
-        stream.write_i32(socket.as_raw_fd() as i32).await?;
+        stream.write_i32(fd).await?;
         if stream.read_i32().await? != 0 {
             return Err(io::Error::new(
                 io::ErrorKind::Other,
@@ -313,7 +313,7 @@ async fn create_udp_socket(
     bind_socket(&socket, bind_addr, indicator).await?;
 
     #[cfg(target_os = "android")]
-    protect_socket(&socket).await?;
+    protect_socket(socket.as_raw_fd()).await?;
 
     UdpSocket::from_std(socket.into())
 }
@@ -347,7 +347,7 @@ async fn tcp_dial_task(
     bind_socket(&socket, bind_addr, &dial_addr).await?;
 
     #[cfg(target_os = "android")]
-    protect_socket(&socket).await?;
+    protect_socket(socket.as_raw_fd()).await?;
 
     trace!("tcp dialing {}", &dial_addr);
     let stream = timeout(

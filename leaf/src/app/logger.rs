@@ -49,7 +49,7 @@ pub fn setup_logger(config: &config::Log) -> Result<()> {
 
     match config.output {
         config::Log_Output::CONSOLE => {
-            #[cfg(any(target_os = "ios", target_os = "android"))]
+            #[cfg(any(target_os = "ios"))]
             {
                 let console_output = fern::Output::writer(
                     Box::new(crate::mobile::logger::ConsoleWriter::default()),

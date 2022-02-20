@@ -36,10 +36,13 @@ tags
 .LSOverride
 
 # Icon must end with two \r
-Icon
+Icon
+
 
 # Thumbnails
 ._*
+
+.idea
 
 # Files that might appear in the root of a volume
 .DocumentRevisions-V100

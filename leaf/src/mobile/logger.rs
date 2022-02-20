@@ -8,8 +8,8 @@ use bytes::BytesMut;
 #[cfg(any(target_os = "ios", target_os = "macos"))]
 use super::bindings::{asl_log, ASL_LEVEL_NOTICE};
 
-#[cfg(target_os = "android")]
-use super::bindings::{__android_log_print, android_LogPriority_ANDROID_LOG_VERBOSE};
+// #[cfg(target_os = "android")]
+// use super::bindings::{__android_log_print, android_LogPriority_ANDROID_LOG_VERBOSE};
 
 #[cfg(any(target_os = "ios", target_os = "macos"))]
 fn log_out(data: &[u8]) {
@@ -27,31 +27,32 @@ fn log_out(data: &[u8]) {
     };
 }
 
-#[cfg(target_os = "android")]
-fn log_out(data: &[u8]) {
-    unsafe {
-        let s = match ffi::CString::new(data) {
-            Ok(s) => s,
-            Err(_) => return,
-        };
-        let _ = __android_log_print(
-            android_LogPriority_ANDROID_LOG_VERBOSE as std::os::raw::c_int,
-            "leaf".as_ptr() as _,
-            s.as_c_str().as_ptr(),
-        );
-    }
-}
+// #[cfg(target_os = "android")]
+// fn log_out(data: &[u8]) {
+//     unsafe {
+//         let s = match ffi::CString::new(data) {
+//             Ok(s) => s,
+//             Err(_) => return,
+//         };
+//         let _ = __android_log_print(
+//             android_LogPriority_ANDROID_LOG_VERBOSE as std::os::raw::c_int,
+//             "leaf".as_ptr() as _,
+//             s.as_c_str().as_ptr(),
+//         );
+//     }
+// }
 
+#[cfg(not(target_os = "android"))]
 pub struct ConsoleWriter(pub BytesMut);
-
+#[cfg(not(target_os = "android"))]
 impl Default for ConsoleWriter {
     fn default() -> Self {
         ConsoleWriter(BytesMut::new())
     }
 }
-
+#[cfg(not(target_os = "android"))]
 unsafe impl Send for ConsoleWriter {}
-
+#[cfg(not(target_os = "android"))]
 impl Write for ConsoleWriter {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.0.extend_from_slice(buf);
