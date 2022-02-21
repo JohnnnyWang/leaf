@@ -126,6 +126,7 @@ pub extern "system" fn Java_com_viraltech_vila_1vpn_1client_SimpleVpnService_run
     rt_id: jint,
     config_json_string: JString,
     protect_path: JString,
+    assets_path: JString,
 ) -> jint {
     let config_path: String = env
         .get_string(config_json_string)
@@ -135,6 +136,13 @@ pub extern "system" fn Java_com_viraltech_vila_1vpn_1client_SimpleVpnService_run
         .get_string(protect_path)
         .expect("Couldn't get java string!")
         .into();
+
+    let assets_path: String = env
+        .get_string(assets_path)
+        .expect("Couldn't get java string!")
+        .into();
+
+    std::env::set_var("ASSET_LOCATION",assets_path.to_string());
     let opts = leaf::StartOptions {
         config: leaf::Config::File(config_path),
         #[cfg(feature = "auto-reload")]

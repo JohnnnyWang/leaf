@@ -101,8 +101,8 @@ fn generate_mobile_bindings() {
         .clang_arg("-v")
         .clang_arg("-Wno-everything")
         .layout_tests(false)
-        .clang_arg(if  os == "android"{"-IC:\\Users\\86186\\AppData\\Local\\Android\\android-sdk\\ndk\\22.1.7171670\\toolchains\\llvm\\prebuilt\\windows-x86_64\\sysroot\\usr\\include\\"}else{""} )
-        .clang_arg(if  os == "android"{"-IC:\\Users\\86186\\AppData\\Local\\Android\\android-sdk\\ndk\\22.1.7171670\\toolchains\\llvm\\prebuilt\\windows-x86_64\\lib64\\clang\\11.0.5\\include\\"}else{""} )
+        .clang_arg(if os == "android" { "-IC:\\Users\\86186\\AppData\\Local\\Android\\android-sdk\\ndk\\22.1.7171670\\toolchains\\llvm\\prebuilt\\windows-x86_64\\sysroot\\usr\\include\\" } else { "" })
+        .clang_arg(if os == "android" { "-IC:\\Users\\86186\\AppData\\Local\\Android\\android-sdk\\ndk\\22.1.7171670\\toolchains\\llvm\\prebuilt\\windows-x86_64\\lib64\\clang\\11.0.5\\include\\" } else { "" })
         .clang_arg(if arch == "aarch64" && os == "ios" {
             // https://github.com/rust-lang/rust-bindgen/issues/1211
             "--target=arm64-apple-ios"
@@ -135,18 +135,18 @@ fn generate_mobile_bindings() {
 
 fn main() {
     #[cfg(feature = "inbound-tun")]
-    {
-        let os = env::var("CARGO_CFG_TARGET_OS").unwrap();
-        if os == "ios" || os == "android" || os == "linux" || os == "macos" {
-            compile_lwip();
-        }
-
-        if env::var("BINDINGS_GEN").is_ok()
-            && (os == "ios" || os == "android" || os == "linux" || os == "macos")
         {
-            generate_lwip_bindings();
+            let os = env::var("CARGO_CFG_TARGET_OS").unwrap();
+            if os == "ios" || os == "android" || os == "linux" || os == "macos" {
+                compile_lwip();
+            }
+
+            if env::var("BINDINGS_GEN").is_ok()
+                && (os == "ios" || os == "android" || os == "linux" || os == "macos")
+            {
+                generate_lwip_bindings();
+            }
         }
-    }
 
     let os = env::var("CARGO_CFG_TARGET_OS").unwrap();
     if os == "ios" || os == "macos" || os == "android" {

@@ -22,11 +22,9 @@ lib:
 	cp target/i686-linux-android/release/libleaf.so ../VilaVpnClient/android/app/src/main/jniLibs/x86/
 
 lib-dev:
-	cargo build -p leaf-ffi
 	cargo build --target aarch64-linux-android -p leaf-ffi
-	cargo build --target x86_64-linux-android -p leaf-ffi
-	cargo build --target armv7-linux-androideabi -p leaf-ffi
-	cargo build --target i686-linux-android -p leaf-ffi
+	rm -rf ../VilaVpnClient/android/app/src/main/jniLibs/arm64-v8a/libleaf*.so
+	cp target/aarch64-linux-android/debug/libleaf.so ../VilaVpnClient/android/app/src/main/jniLibs/arm64-v8a/
 	cbindgen --config leaf-ffi/cbindgen.toml leaf-ffi/src/lib.rs > target/debug/leaf.h
 
 local:
