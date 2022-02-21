@@ -98,8 +98,11 @@ fn generate_mobile_bindings() {
     let os = env::var("CARGO_CFG_TARGET_OS").unwrap();
     let bindings = bindgen::Builder::default()
         .header("src/mobile/wrapper.h")
+        .clang_arg("-v")
         .clang_arg("-Wno-everything")
         .layout_tests(false)
+        .clang_arg(if  os == "android"{"-IC:\\Users\\86186\\AppData\\Local\\Android\\android-sdk\\ndk\\22.1.7171670\\toolchains\\llvm\\prebuilt\\windows-x86_64\\sysroot\\usr\\include\\"}else{""} )
+        .clang_arg(if  os == "android"{"-IC:\\Users\\86186\\AppData\\Local\\Android\\android-sdk\\ndk\\22.1.7171670\\toolchains\\llvm\\prebuilt\\windows-x86_64\\lib64\\clang\\11.0.5\\include\\"}else{""} )
         .clang_arg(if arch == "aarch64" && os == "ios" {
             // https://github.com/rust-lang/rust-bindgen/issues/1211
             "--target=arm64-apple-ios"

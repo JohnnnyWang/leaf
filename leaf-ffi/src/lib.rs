@@ -1,5 +1,11 @@
 use std::{ffi::CStr, os::raw::c_char};
 
+use jni::JNIEnv;
+use jni::objects::{JClass, JString};
+use jni::sys::jint;
+
+use leaf::RuntimeId;
+
 /// No error.
 pub const ERR_OK: i32 = 0;
 /// Config path error.
@@ -89,23 +95,15 @@ pub extern "C" fn leaf_run_with_options(
 ///                    or .json, according to the enabled features.
 /// @return ERR_OK on finish running, any other errors means a startup failure.
 #[no_mangle]
-pub extern "C" fn leaf_run(rt_id: u16, config_path: *const c_char,
-                           #[cfg(target_os = "android")] protect_path: *const c_char) -> i32 {
+#[cfg(not(target_os = "android"))]
+pub extern "C" fn leaf_run(rt_id: u16, config_path: *const c_char) -> i32 {
     if let Ok(config_path) = unsafe { CStr::from_ptr(config_path).to_str() } {
-        #[cfg(target_os = "android")]
-        let mut pp = "";
-        #[cfg(target_os = "android")] {
-            pp = unsafe { CStr::from_ptr(protect_path).to_str().unwrap() };
-        }
-
-
         let opts = leaf::StartOptions {
             config: leaf::Config::File(config_path.to_string()),
             #[cfg(feature = "auto-reload")]
             auto_reload: false,
-            #[cfg(target_os = "android")]
-            socket_protect_path:Some(pp.to_string()),
-            runtime_opt: leaf::RuntimeOption::SingleThread,
+
+            runtime_opt: leaf::RuntimeOption::MultiThreadAuto(1 * 1024 * 1024),
         };
         if let Err(e) = leaf::start(rt_id, opts) {
             return to_errno(e);
@@ -115,6 +113,58 @@ pub extern "C" fn leaf_run(rt_id: u16, config_path: *const c_char,
         ERR_CONFIG_PATH
     }
 }
+
+#[cfg(target_os = "android")]
+#[no_mangle]
+pub extern "system" fn Java_com_viraltech_vila_1vpn_1client_SimpleVpnService_runLeafAndroid(
+    env: JNIEnv,
+    // this is the class that owns our
+    // static method. Not going to be
+    // used, but still needs to have
+    // an argument slot
+    _class: JClass,
+    rt_id: jint,
+    config_json_string: JString,
+    protect_path: JString,
+) -> jint {
+    let config_path: String = env
+        .get_string(config_json_string)
+        .expect("Couldn't get java string!")
+        .into();
+    let protect_path: String = env
+        .get_string(protect_path)
+        .expect("Couldn't get java string!")
+        .into();
+    let opts = leaf::StartOptions {
+        config: leaf::Config::File(config_path),
+        #[cfg(feature = "auto-reload")]
+        auto_reload: false,
+        #[cfg(target_os = "android")]
+        socket_protect_path: Some(protect_path),
+        runtime_opt: leaf::RuntimeOption::MultiThreadAuto(1 * 1024 * 1024),
+    };
+    if let Err(e) = leaf::start(rt_id as RuntimeId, opts) {
+        return to_errno(e);
+    }
+    return ERR_OK;
+}
+
+
+#[cfg(target_os = "android")]
+#[no_mangle]
+pub extern "system" fn Java_com_viraltech_vila_1vpn_1client_SimpleVpnService_shutdownLeafAndroid(
+    env: JNIEnv,
+    // this is the class that owns our
+    // static method. Not going to be
+    // used, but still needs to have
+    // an argument slot
+    _class: JClass,
+    rt_id: jint,
+) -> jint {
+    leaf::shutdown(rt_id as RuntimeId);
+    return ERR_OK;
+}
+
 
 /// Reloads DNS servers, outbounds and routing rules from the config file.
 ///

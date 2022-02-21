@@ -29,7 +29,7 @@ pub fn setup_logger(config: &config::Log) -> Result<()> {
                     .debug(Color::White)
                     .trace(Color::BrightBlack);
 
-                let colors_level = colors_line.clone().info(Color::Green);
+                let colors_level = colors_line.info(Color::Green);
                 out.finish(format_args!(
                     // "{color_line}[{date}][{level}{color_line}][{target}] {message}\x1B[0m",
                     "{color_line}[{date}][{level}{color_line}] {message}\x1B[0m",
@@ -49,18 +49,18 @@ pub fn setup_logger(config: &config::Log) -> Result<()> {
 
     match config.output {
         config::Log_Output::CONSOLE => {
-            #[cfg(any(target_os = "ios"))]
-            {
-                let console_output = fern::Output::writer(
-                    Box::new(crate::mobile::logger::ConsoleWriter::default()),
-                    "\n",
-                );
-                dispatch = dispatch.chain(console_output);
-            }
+            #[cfg(any(target_os = "ios", target_os = "android"))]
+                {
+                    let console_output = fern::Output::writer(
+                        Box::new(crate::mobile::logger::ConsoleWriter::default()),
+                        "\n",
+                    );
+                    dispatch = dispatch.chain(console_output);
+                }
             #[cfg(not(any(target_os = "ios", target_os = "android")))]
-            {
-                dispatch = dispatch.chain(fern::Output::stdout("\n"));
-            }
+                {
+                    dispatch = dispatch.chain(fern::Output::stdout("\n"));
+                }
             #[cfg(target_os = "macos")]
             if *crate::option::LOG_CONSOLE_OUT {
                 let console_output = fern::Output::writer(
