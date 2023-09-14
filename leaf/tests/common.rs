@@ -65,7 +65,7 @@ pub fn run_leaf_instances(
             runtime_opt: leaf::RuntimeOption::SingleThread,
         };
         rt.spawn_blocking(move || {
-            leaf::start(rt_id, opts).unwrap();
+            leaf::start(rt_id, opts, None).unwrap();
         });
         leaf_rt_ids.push(rt_id);
         rt_id += 1;
@@ -112,7 +112,10 @@ pub async fn new_socks_stream(socks_addr: &str, socks_port: u16, sess: &Session)
         .unwrap();
     timeout(
         Duration::from_secs(2),
-        handler.stream().unwrap().handle(sess, Some(Box::new(stream))),
+        handler
+            .stream()
+            .unwrap()
+            .handle(sess, Some(Box::new(stream))),
     )
     .await
     .unwrap()

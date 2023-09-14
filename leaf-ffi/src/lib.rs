@@ -97,7 +97,34 @@ pub extern "C" fn leaf_run(rt_id: u16, config_path: *const c_char) -> i32 {
             auto_reload: false,
             runtime_opt: leaf::RuntimeOption::SingleThread,
         };
-        if let Err(e) = leaf::start(rt_id, opts) {
+        if let Err(e) = leaf::start(rt_id, opts, None) {
+            return to_errno(e);
+        }
+        ERR_OK
+    } else {
+        ERR_CONFIG_PATH
+    }
+}
+
+/// Starts yeznet with a single-threaded runtime, on a successful start this function
+/// blocks the current thread.
+#[no_mangle]
+pub extern "C" fn yeznet_run(
+    rt_id: u16,
+    config_path: *const c_char,
+    yez_config_path: *const c_char,
+) -> i32 {
+    if let (Ok(yez_config_path), Ok(config_path)) = (
+        unsafe { CStr::from_ptr(yez_config_path).to_str() },
+        unsafe { CStr::from_ptr(config_path).to_str() },
+    ) {
+        let opts = leaf::StartOptions {
+            config: leaf::Config::File(config_path.to_string()),
+            #[cfg(feature = "auto-reload")]
+            auto_reload: false,
+            runtime_opt: leaf::RuntimeOption::MultiThreadAuto(2 * 1024 * 1024),
+        };
+        if let Err(e) = leaf::start(rt_id, opts, Some(yez_config_path.to_string())) {
             return to_errno(e);
         }
         ERR_OK
@@ -115,7 +142,7 @@ pub extern "C" fn leaf_run_with_config_string(rt_id: u16, config: *const c_char)
             auto_reload: false,
             runtime_opt: leaf::RuntimeOption::SingleThread,
         };
-        if let Err(e) = leaf::start(rt_id, opts) {
+        if let Err(e) = leaf::start(rt_id, opts, None) {
             return to_errno(e);
         }
         ERR_OK
