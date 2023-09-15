@@ -6,6 +6,9 @@ use std::sync::Mutex;
 
 use anyhow::anyhow;
 use lazy_static::lazy_static;
+use nut::delegation::leaf::config::NutLeafDelegationConfig;
+use nut::delegation::leaf::LeafDelegation;
+use nut::delegation::leaf::RuntimeManagerWrapper;
 use thiserror::Error;
 use tokio::sync::mpsc;
 use tokio::sync::RwLock;
@@ -80,6 +83,21 @@ pub struct RuntimeManager {
     watcher: Mutex<Option<RecommendedWatcher>>,
 }
 
+#[async_trait::async_trait]
+impl RuntimeManagerWrapper for RuntimeManager {
+    async fn exec_reload(&self) {
+        let tx = self.reload_tx.clone();
+        let (res_tx, res_rx) = sync_channel(0);
+        if let Err(e) = tx.send(res_tx).await {
+            log::error!("sending reload signal failed: {}", e);
+        }
+        match res_rx.recv() {
+            Ok(_) => log::info!("reload success"),
+            Err(e) => log::error!("receiving reload result failed: {}", e),
+        };
+    }
+}
+
 impl RuntimeManager {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -152,7 +170,6 @@ impl RuntimeManager {
         } else {
             return Err(Error::NoConfigFile);
         };
-        log::info!("reloading from config file: {}", config_path);
         let mut config = config::from_file(config_path).map_err(Error::Config)?;
         app::logger::setup_logger(&config.log)?;
         self.router.write().await.reload(&mut config.router)?;
@@ -162,7 +179,6 @@ impl RuntimeManager {
             .await
             .reload(&config.outbounds, self.dns_client.clone())
             .await?;
-        log::info!("reloaded from config file: {}", config_path);
         Ok(())
     }
 
@@ -358,7 +374,11 @@ pub struct StartOptions {
     pub runtime_opt: RuntimeOption,
 }
 
-pub fn start(rt_id: RuntimeId, opts: StartOptions) -> Result<(), Error> {
+pub fn start(
+    rt_id: RuntimeId,
+    opts: StartOptions,
+    yezconfig_path: Option<String>,
+) -> Result<(), Error> {
     #[cfg(debug_assertions)]
     println!("start with options:\n{:#?}", opts);
 
@@ -524,6 +544,24 @@ pub fn start(rt_id: RuntimeId, opts: StartOptions) -> Result<(), Error> {
             }
         }
     }));
+    let rm = runtime_manager.clone();
+    if let Some(yezpath) = yezconfig_path {
+        if let Ok(config) = std::fs::read_to_string(yezpath) {
+            log::info!("read yez config file success: \n {}", &config);
+            if let Ok(mut nut_config) = serde_json::from_str::<NutLeafDelegationConfig>(&config) {
+                nut_config.leaf_runtime_id = rt_id;
+                let delegation = LeafDelegation::new(nut_config, rm);
+                let _runner = tokio::spawn(async move {
+                    let _ = delegation.run_loop().await;
+                });
+                log::info!("start yez delegation success");
+            } else {
+                log::error!("parse yez config file failed");
+            }
+        } else {
+            log::error!("read yez config file failed");
+        }
+    }
 
     // The main task joining all runners.
     tasks.push(Box::pin(async move {
@@ -594,7 +632,7 @@ Direct = direct
                     auto_reload: false,
                     runtime_opt: RuntimeOption::SingleThread,
                 };
-                start(0, opts).unwrap();
+                start(0, opts, None).unwrap();
             });
             thread::sleep(std::time::Duration::from_secs(2));
             assert!(shutdown(0));

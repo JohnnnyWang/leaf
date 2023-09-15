@@ -65,7 +65,7 @@ pub fn run_leaf_instances(
             runtime_opt: leaf::RuntimeOption::SingleThread,
         };
         rt.spawn_blocking(move || {
-            leaf::start(rt_id, opts).unwrap();
+            leaf::start(rt_id, opts, None).unwrap();
         });
         leaf_rt_ids.push(rt_id);
         rt_id += 1;
