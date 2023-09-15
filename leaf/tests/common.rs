@@ -115,7 +115,7 @@ pub async fn new_socks_stream(socks_addr: &str, socks_port: u16, sess: &Session)
         handler
             .stream()
             .unwrap()
-            .handle(sess, Some(Box::new(stream))),
+            .handle(sess, None, Some(Box::new(stream))),
     )
     .await
     .unwrap()

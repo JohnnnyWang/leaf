@@ -146,6 +146,7 @@ impl OutboundStreamHandler for Handler {
     async fn handle<'a>(
         &'a self,
         sess: &'a Session,
+        _lhs: Option<&mut AnyStream>,
         stream: Option<AnyStream>,
     ) -> io::Result<AnyStream> {
         // TODO optimize, dont need copy
@@ -154,10 +155,10 @@ impl OutboundStreamHandler for Handler {
         } else {
             sess.destination.host()
         };
-        trace!("wrapping tls with name {}", &name);
         if let Some(stream) = stream {
             #[cfg(feature = "rustls-tls")]
             {
+                trace!("handling TLS {} with rustls", &name);
                 let connector = TlsConnector::from(self.tls_config.clone());
                 let domain = ServerName::try_from(name.as_str()).map_err(|e| {
                     io::Error::new(
@@ -179,6 +180,7 @@ impl OutboundStreamHandler for Handler {
             }
             #[cfg(feature = "openssl-tls")]
             {
+                trace!("handling TLS {} with openssl", &name);
                 let mut ssl = Ssl::new(self.ssl_connector.context()).map_err(|e| {
                     io::Error::new(
                         io::ErrorKind::InvalidInput,

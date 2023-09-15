@@ -83,7 +83,7 @@ config-json = ["serde", "serde_derive", "serde_json"]
 outbound-direct = []
 outbound-drop = []
 outbound-redirect = []
-outbound-shadowsocks = ["hkdf", "sha-1", "md-5", "tokio-util"]
+outbound-shadowsocks = ["hkdf", "sha-1", "md-5", "percent-encoding", "tokio-util"]
 outbound-obfs = ["base64", "memchr"]
 outbound-socks = ["async-socks5"]
 outbound-trojan = ["sha2", "hex"]
@@ -93,8 +93,9 @@ outbound-failover = ["lru_time_cache"]
 outbound-static = []
 outbound-tryall = []
 outbound-chain = []
-outbound-amux = ["tokio-util"]
-outbound-quic = ["quinn", "rustls", "webpki-roots"]
+
+outbound-amux= ["tokio-util"]
+outbound-quic = ["quinn", "rustls", "webpki-roots", "rustls-pemfile"]
 outbound-select = []
 outbound-vmess = [
     "lz_fnv",
@@ -161,10 +162,9 @@ serde_derive = { version = "1.0", optional = true }
 serde = { version = "1.0", optional = true }
 
 # config-conf
-regex = { version = "1", default-features = false, features = [
-    "std",
-    "perf",
-], optional = true }
+
+regex = { version = "1", optional = true }
+
 
 # Openssl
 openssl = { version = "0.10", features = ["vendored"], optional = true }
@@ -213,6 +213,7 @@ async-socks5 = { version = "0.5", optional = true }
 hkdf = { version = "0.11", optional = true }
 md-5 = { version = "0.10", optional = true }
 sha-1 = { version = "0.9", optional = true }
+percent-encoding = { version = "2", optional = true }
 
 # Obfs
 base64 = { version = "0.21", optional = true }
@@ -256,10 +257,10 @@ jni = "0.21"
 
 # TUN
 [target.'cfg(any(target_os = "ios", target_os = "android", target_os = "macos", target_os = "linux"))'.dependencies]
-tun = { git = "https://github.com/eycorsican/rust-tun.git", branch = "fork", features = [
-    "async",
-], optional = true }
-netstack-lwip = { git = "https://github.com/eycorsican/netstack-lwip.git", optional = true }
+
+tun = { git = "https://github.com/eycorsican/rust-tun.git", branch = "fork", features = ["async"], optional = true }
+netstack-lwip = { git = "https://github.com/eycorsican/netstack-lwip.git", rev = "4fef23", optional = true }
+
 
 [target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
 pnet_datalink = { version = "0.28", package = "pnet_datalink" }
