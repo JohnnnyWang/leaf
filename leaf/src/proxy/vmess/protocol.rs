@@ -1,16 +1,19 @@
-use std::time::{SystemTime, UNIX_EPOCH};
 
-use aes::cipher::{AsyncStreamCipher, KeyIvInit};
-use anyhow::{anyhow, Result};
+
+use aes::cipher::{KeyIvInit};
+use anyhow::{Result};
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{BufMut, BytesMut};
-use hmac::{Hmac, Mac};
+use hmac::{Mac};
 use lz_fnv::{Fnv1a, FnvHasher};
 use md5::{Digest, Md5};
 use rand::{rngs::StdRng, Rng, SeedableRng};
+use sha2::Sha256;
 use uuid::Uuid;
 
 use crate::session::{SocksAddr, SocksAddrWireType};
+
+use super::aead_header::seal_vmess_aead_header;
 
 type RequestCommand = u8;
 
@@ -43,31 +46,14 @@ impl RequestHeader {
     }
 
     pub fn encode(&self, buf: &mut BytesMut, sess: &ClientSession) -> Result<()> {
-        // generate auth info
-        let mut timestamp = match SystemTime::now().duration_since(UNIX_EPOCH) {
-            Ok(n) => n.as_secs(),
-            Err(_) => return Err(anyhow!("invalid system time")),
-        };
-        let mut rng = StdRng::from_entropy();
-        let delta: i32 = rng.gen_range(0..30 * 2) - 30;
-        timestamp = timestamp.wrapping_add(delta as u64);
-        let mut mac =
-            Hmac::<Md5>::new_from_slice(self.uuid.as_bytes()).map_err(|_| anyhow!("md5 failed"))?;
-        let mut tmp = [0u8; 8];
-        BigEndian::write_u64(&mut tmp, timestamp as u64);
-        mac.update(&tmp);
-        let auth_info = mac.finalize().into_bytes();
-
-        buf.put_slice(&auth_info[..]);
-
         buf.put_u8(self.version);
         buf.put_slice(&sess.request_body_iv);
         buf.put_slice(&sess.request_body_key);
         buf.put_u8(sess.response_header);
         buf.put_u8(self.option);
 
-        let padding_len = StdRng::from_entropy().gen_range(0..16) as u8;
-        let security = (padding_len << 4) | self.security as u8;
+        let padding_len = StdRng::from_entropy().gen_range(0..16) % 16_u8;
+        let security = (padding_len << 4) | self.security;
 
         buf.put_u8(security);
         buf.put_u8(0);
@@ -88,23 +74,11 @@ impl RequestHeader {
 
         // checksum
         let mut hasher = Fnv1a::<u32>::default();
-        hasher.write(&buf[auth_info.len()..]);
+        hasher.write(buf);
         let h = hasher.finish();
         let buf_size = buf.len();
         buf.resize(buf_size + 4, 0);
         BigEndian::write_u32(&mut buf[buf_size..], h);
-
-        // iv for header encryption
-        let mut tmp = [0u8; 8];
-        BigEndian::write_u64(&mut tmp, timestamp as u64);
-        let mut hasher = Md5::new();
-        hasher.update(&tmp);
-        hasher.update(&tmp);
-        hasher.update(&tmp);
-        hasher.update(&tmp);
-        let iv = hasher.finalize();
-
-        // key for header ecnryption
         let mut hasher = Md5::new();
         hasher.update(self.uuid.as_bytes());
         hasher.update(
@@ -114,8 +88,8 @@ impl RequestHeader {
         );
         let key = hasher.finalize();
 
-        // encrypt cmd part
-        cfb_mode::Encryptor::<aes::Aes128>::new(&key, &iv).encrypt(&mut buf[auth_info.len()..]);
+        let aead_buf = seal_vmess_aead_header(&key, buf);
+        *buf = aead_buf;
         Ok(())
     }
 }
@@ -130,23 +104,27 @@ pub struct ClientSession {
 
 impl ClientSession {
     pub fn new() -> Self {
+        let mut salt = [0u8; 64];
+        super::aead_helper::random_iv_or_salt(&mut salt);
+        let respv = salt[32];
+        let resp_body_key = sha256(&salt[16..32]);
+        let resp_body_iv = sha256(&salt[0..16]);
+        salt[32..48].copy_from_slice(&resp_body_key[..16]);
+        salt[48..64].copy_from_slice(&resp_body_iv[..16]);
+        let req_body_iv = &salt[0..16];
+        let req_body_key = &salt[16..32];
+        let resp_body_key = &salt[32..48];
+        let resp_body_iv = &salt[48..];
+
         let mut request_body_key = vec![0u8; 16];
         let mut request_body_iv = vec![0u8; 16];
-        let response_header: u8;
+        let response_header: u8 = respv;
 
-        // fill random bytes
-        let mut rand_bytes = BytesMut::with_capacity(16 + 16 + 1);
-        unsafe { rand_bytes.set_len(16 + 16 + 1) };
-        let mut rng = StdRng::from_entropy();
-        for i in 0..rand_bytes.len() {
-            rand_bytes[i] = rng.gen();
-        }
-        (&mut request_body_key[..]).copy_from_slice(&rand_bytes[..16]);
-        (&mut request_body_iv[..]).copy_from_slice(&rand_bytes[16..32]);
-        response_header = rand_bytes[32];
+        request_body_key[..].copy_from_slice(req_body_key);
+        request_body_iv[..].copy_from_slice(req_body_iv);
 
-        let response_body_key = Md5::digest(&request_body_key).to_vec();
-        let response_body_iv = Md5::digest(&request_body_iv).to_vec();
+        let response_body_key = resp_body_key[..16].to_vec();
+        let response_body_iv = resp_body_iv[..16].to_vec();
 
         ClientSession {
             request_body_key,
@@ -156,4 +134,10 @@ impl ClientSession {
             response_header,
         }
     }
+}
+
+pub fn sha256(b: &[u8]) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(b);
+    hasher.finalize().into()
 }

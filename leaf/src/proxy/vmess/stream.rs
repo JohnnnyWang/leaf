@@ -2,7 +2,8 @@ use std::mem::MaybeUninit;
 use std::{cmp::min, io, pin::Pin};
 
 use aes::cipher::{AsyncStreamCipher, KeyIvInit};
-use bytes::{BufMut, BytesMut};
+
+use bytes::{Buf, BufMut, BytesMut};
 use futures::{
     ready,
     task::{Context, Poll},
@@ -14,6 +15,9 @@ use crate::common::crypto::{
     aead::{AeadDecryptor, AeadEncryptor},
     Decryptor, Encryptor,
 };
+
+
+use super::aead_header::VmessHeaderReader;
 
 use super::crypto::{PaddingLengthGenerator, ShakeSizeParser, VMessAEADSequence};
 use super::protocol::ClientSession;
@@ -121,31 +125,57 @@ impl<T: AsyncRead + Unpin> AsyncRead for VMessAuthStream<T> {
         buf: &mut ReadBuf,
     ) -> Poll<io::Result<()>> {
         loop {
+            let aead_reader = VmessHeaderReader::new(
+                &self.sess.response_body_key,
+                &self.sess.response_body_iv,
+                self.sess.response_header,
+            );
             match self.read_state {
                 ReadState::WaitingResponseHeader => {
                     let me = &mut *self;
-                    ready!(me.poll_read_exact(cx, 4))?;
-                    cfb_mode::Decryptor::<aes::Aes128>::new(
-                        me.sess.response_body_key.as_slice().into(),
-                        me.sess.response_body_iv.as_slice().into(),
-                    )
-                    .decrypt(&mut me.read_buf[..4]);
+                    ready!(me.poll_read_exact(cx, 18))?;
+                    if !aead_reader.decrypt_resp_header_len_in_place_with_slice(
+                        &[0u8; 0],
+                        &mut me.read_buf[..18],
+                    ) {
+                        return Poll::Ready(Err(crypto_err()));
+                    }
 
+                    let size = me.read_buf.get_u16() as usize;
+                    me.read_buf.advance(16);
+
+                    ready!(me.poll_read_exact(cx, size + 16))?;
+                    if !aead_reader.decrypt_resp_header_payload_in_place_with_slice(
+                        &[0u8; 0],
+                        &mut me.read_buf[..size + 16],
+                    ) {
+                        return Poll::Ready(Err(crypto_err()));
+                    }
+
+                    // tag(16) + vmess command(at least 4)
+                    if me.read_buf.len() < 20 {
+                        return Poll::Ready(Err(crypto_err()));
+                    }
                     if me.read_buf[0] != me.sess.response_header {
                         return Poll::Ready(Err(crypto_err()));
                     }
+                    if me.read_buf[2] != 0 {
+                        return Poll::Ready(Err(crypto_err()));
+                    }
+
+                    me.read_buf.advance(size + 16);
 
                     // ready to read data chunks
                     me.read_state = ReadState::WaitingLength;
                 }
                 ReadState::WaitingLength => {
-                    // read and decode payload length
                     let me = &mut *self;
-                    let size_bytes = me.dec_size_parser.size_bytes();
-                    ready!(me.poll_read_exact(cx, size_bytes))?;
+                    ready!(me.poll_read_exact(cx, me.dec_size_parser.size_bytes()))?;
                     let padding_size = me.dec_size_parser.next_padding_len() as usize;
-                    let size = me.dec_size_parser.decode(&me.read_buf[..size_bytes]) as usize;
-
+                    let size = me
+                        .dec_size_parser
+                        .decode(&me.read_buf[..me.dec_size_parser.size_bytes()])
+                        as usize;
                     // ready to read payload
                     me.read_state = ReadState::WaitingData(size, padding_size);
                 }
